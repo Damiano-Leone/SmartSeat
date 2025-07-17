@@ -1,0 +1,5 @@
+1,"Cowork Milano Centrale","Via Roma 100, Milano"
+2,"Torino Workspace","Corso Torino 45, Torino"
+3,"Napoli Creative Hub","Via Napoli 22, Napoli"
+4,"Venezia CoLab","Viale Venezia 10, Venezia"
+5,"Genova WorkSpot","Piazza Genova 5, Genova"

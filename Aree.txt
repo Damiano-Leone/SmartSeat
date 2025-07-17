@@ -1,0 +1,10 @@
+1,"Open Space A","Area open space con 12 postazioni condivise",1
+2,"Meeting Room 1","Sala riunioni con schermo 4K e lavagna digitale",1
+3,"Focus Zone","Area silenziosa per lavoro individuale",2
+4,"Creative Corner","Zona relax con divanetti e lavagna a muro",2
+5,"Open Desk Napoli","Postazioni libere con connessione veloce",3
+6,"Startup Room","Spazio dedicato a team di progetto e startup",3
+7,"Smart Desk Venezia","Scrivanie prenotabili con luce naturale",4
+8,"Brainstorm Area","Spazio per sessioni creative e teamwork",4
+9,"Hot Desk Genova","Postazioni temporanee con accesso rapido",5
+10,"Team Room","Sala per gruppi fino a 6 persone",5

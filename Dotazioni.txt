@@ -1,0 +1,5 @@
+1,"Postazione Smart con Scrivania Regolabile e Monitor 24''","Postazione individuale dotata di scrivania regolabile in altezza, monitor Full HD da 24 pollici e sedia ergonomica"
+2,"Postazione Doppio Monitor con Supporto Braccio Snodato","Workstation con due monitor 24'', supporto braccio doppio regolabile, sedia imbottita professionale e lampada da tavolo LED"
+3,"Desk Essenziale con Sedia Ergonomica in Rete","Scrivania in legno laminato con sedia ergonomica in rete traspirante e dock USB-C universale per dispositivi"
+4,"Postazione Meeting Compact con Monitor Singolo","Scrivania compatta adatta a riunioni veloci, dotata di monitor 21'' e seduta comfort con rotelle"
+5,"Workstation Premium con Sedia Executive e Accessori","Postazione completa con doppio monitor, tastiera/mouse wireless, lampada regolabile e sedia executive in ecopelle"

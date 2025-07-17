@@ -1,0 +1,3 @@
+1,Marco,Rossi,marco.rossi@gmail.com,utente
+2,Giulia,Bianchi,giulia.bianchi@gmail.com,utente
+3,Luca,Neri,luca.neri@gmail.com,admin
