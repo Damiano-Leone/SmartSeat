@@ -1,6 +1,8 @@
 package com.leone.app.domain;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class Sede {
@@ -42,6 +44,14 @@ public class Sede {
 
     public Map<Integer, Area> getElencoAree() {
         return elencoAree;
+    }
+
+    public List<Postazione> getPostazioni() {
+        List<Postazione> postazioni = new ArrayList<>();
+        for (Area area : getElencoAree().values()) {
+            postazioni.addAll(area.getElencoPostazioni().values());
+        }
+        return postazioni;
     }
 
     @Override

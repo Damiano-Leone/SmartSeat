@@ -8,6 +8,15 @@ public class Postazione {
     private final Area area;
     private final Dotazione dotazione;
 
+    public Postazione(int idPostazione) {
+        this.idPostazione = idPostazione;
+        this.codice = null;
+        this.posizione = null;
+        this.vicinanzaAFinestra = false;
+        this.area = null;
+        this.dotazione = null;
+    }
+
     public Postazione(int idPostazione, String codice,  String posizione, boolean vicinanzaAFinestra, Area area, Dotazione dotazione) {
         this.idPostazione = idPostazione;
         this.codice = codice;

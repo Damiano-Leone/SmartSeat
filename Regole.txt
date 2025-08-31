@@ -1,4 +1,5 @@
 // ID;NOME;TIPO;SCOPETIPO;ID_RIFERIMENTO;VALORE;DATA_INIZIO;DATA_FINE;DESCRIZIONE
-1;Limite ore sede Milano;LIMITE_ORE_GIORNALIERO;SEDE;2;8;2025-07-01;2025-08-31;Massimo 8 ore al giorno per sede Milano
+1;Limite ore sede Milano;LIMITE_ORE_GIORNALIERO;SEDE;1;8;2025-07-01;2025-09-30;Massimo 8 ore al giorno per sede Milano
 2;Blocco utente 3;BLOCCO_UTENTE;UTENTE;3;;2025-07-01;2025-07-20;Utente bloccato per uso scorretto
 3;Stop weekend;BLOCCO_GIORNI;GLOBALE;*;SATURDAY,SUNDAY;2025-01-01;2025-12-31;Prenotazioni non consentite nel weekend
+4;Blocco utente 3;BLOCCO_UTENTE;UTENTE;2;;2025-08-25;2025-09-24;Utente bloccato per uso scorretto

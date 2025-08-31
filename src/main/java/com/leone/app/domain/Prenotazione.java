@@ -1,10 +1,9 @@
 package com.leone.app.domain;
 
+import com.leone.app.util.QRCode;
+
 import java.io.*;
-import java.time.DayOfWeek;
-import java.time.Duration;
-import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.*;
@@ -12,7 +11,7 @@ import java.util.stream.Collectors;
 
 public class Prenotazione {
     private static int nextId = 1;
-    private final int id;
+    private int id;
     private final Utente utente;
     private Sede sede;
     private Postazione postazione;
@@ -24,9 +23,20 @@ public class Prenotazione {
     private final List<Regola> regoleApplicate = new ArrayList<>();
 
     public Prenotazione(Utente utente) {
-        Prenotazione.inizializzaNextIdDaFile();
-        this.id = nextId++;
+        this.id = -1;
         this.utente = utente;
+    }
+
+    public Prenotazione(int id, LocalDate data, String fasciaOraria, Utente utente, Postazione postazione) {
+        this.id = id;
+        this.data = data;
+        this.fasciaOraria = fasciaOraria;
+        this.utente = utente;
+        this.postazione = postazione;
+        this.sede = null;
+        this.vicinoFinestra = false;
+        this.idDotazione = 0;
+        this.idArea = 0;
     }
 
     public int getId() {
@@ -103,6 +113,20 @@ public class Prenotazione {
 
     public void rimuoviRegola(Regola regola) {
         this.regoleApplicate.remove(regola);
+    }
+
+    public String riepilogoPrenotazione() {
+        return "Prenotazione{" +
+                "utente=" + utente +
+                ", sede=" + sede +
+                ", postazione=" + postazione +
+                ", data=" + data +
+                ", fasciaOraria='" + fasciaOraria + '\'' +
+                ", vicinoFinestra=" + vicinoFinestra +
+                ", idDotazione=" + idDotazione +
+                ", idArea=" + idArea +
+                ", regoleApplicate=" + regoleApplicate +
+                '}';
     }
 
     @Override
@@ -188,7 +212,7 @@ public class Prenotazione {
                     LocalTime bookedEnd = LocalTime.parse(bookedFasciaParts[1], timeFormatter);
 
                     // Controllo sovrapposizione
-                    boolean overlap = !(userEnd.isBefore(bookedStart) || bookedEnd.isBefore(userStart));
+                    boolean overlap = userStart.isBefore(bookedEnd) && userEnd.isAfter(bookedStart);
                     if (overlap) return false;
                 }
             }
@@ -210,10 +234,12 @@ public class Prenotazione {
             }
             case LIMITE_ORE_GIORNALIERO -> {
                 int limite = Integer.parseInt(r.getValore());
-                int orePrenotazioneCorrente = getDurataOre();
-
-                if (orePrenotazioneCorrente > limite) {
-                    throw new IllegalStateException("⛔ Superato limite di " + limite + " ore giornaliere. La tua prenotazione dura " + orePrenotazioneCorrente + " ore.");
+                long minutiTotali = (long)(calcolaOreGiornaliereUtente(this.data) * 60); // minuti totali
+                if (minutiTotali > limite * 60) {
+                    String durata = formatOreEMinuti(minutiTotali);
+                    throw new IllegalStateException("⛔ Superato il limite di " + limite +
+                            " ore giornaliere. Le tue prenotazioni per il " + data.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) +
+                            " hanno una durata complessiva di " + durata + " ore.");
                 }
             }
             case BLOCCO_GIORNI -> {
@@ -242,33 +268,205 @@ public class Prenotazione {
         }
     }
 
-    public int getDurataOre() {
+    public String formatOreEMinuti(long minutiTotali) {
+        long ore = minutiTotali / 60;
+        long minuti = minutiTotali % 60;
+        return String.format("%d:%02d", ore, minuti);
+    }
+
+    public double calcolaOreGiornaliereUtente(LocalDate data) {
+        double oreTotali = getDurataOre(); // include prenotazione corrente
+
+        try (BufferedReader reader = new BufferedReader(new FileReader("Prenotazioni.txt"))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank() || line.startsWith("//")) continue;
+
+                String[] campi = line.split(",");
+                int idUtenteFile = Integer.parseInt(campi[4]);
+                LocalDate dataFile = LocalDate.parse(campi[2]);
+                String fasciaFile = campi[3];
+
+                if (idUtenteFile == this.utente.getIdUtente() && dataFile.equals(data)) {
+                    // calcola durata in ore decimali della prenotazione esistente
+                    String[] parts = fasciaFile.split("-");
+                    LocalTime start = LocalTime.parse(parts[0]);
+                    LocalTime end = LocalTime.parse(parts[1]);
+                    long minuti = Duration.between(start, end).toMinutes();
+                    oreTotali += minuti / 60.0;
+                }
+            }
+        } catch (IOException | NumberFormatException e) {
+            e.printStackTrace();
+        }
+
+        return oreTotali;
+    }
+
+
+    public double getDurataOre() {
         if (fasciaOraria == null || !fasciaOraria.contains("-")) return 0;
 
         try {
             String[] parts = fasciaOraria.split("-");
             LocalTime start = LocalTime.parse(parts[0]);
             LocalTime end = LocalTime.parse(parts[1]);
-            return (int) Duration.between(start, end).toHours();
+
+            long minuti = Duration.between(start, end).toMinutes();
+            return minuti / 60.0; // ore decimali, es. 8.02
         } catch (Exception e) {
             return 0;
         }
     }
 
-    public static void registraPrenotazione(Prenotazione p) {
-        String riga = String.format("%d,%d,%s,%s,%d",
-                p.getId(),
-                p.getPostazione().getIdPostazione(),
-                p.getData(),
-                p.getFasciaOraria(),
-                p.getUtente().getIdUtente()
+    public String registraPrenotazione() {
+        if (utenteHaPrenotazioniSovrapposte(utente.getIdUtente(), data, fasciaOraria)) {
+            throw new IllegalStateException("⛔ L'utente ha già una prenotazione sovrapposta nella stessa giornata ("
+                    + data.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) + ")");
+        }
+        inizializzaNextIdDaFile();
+        this.id = nextId++;
+        UUID uuid = UUID.randomUUID();
+
+        String riga = String.format("%d,%d,%s,%s,%d,%s",
+                id,
+                postazione.getIdPostazione(),
+                data,
+                fasciaOraria,
+                utente.getIdUtente(),
+                uuid
         );
+
+        String pathQRCode = "qrcode/" + uuid + ".png";
+        QRCode.generaQRCode(uuid.toString(), pathQRCode);
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter("Prenotazioni.txt", true))) {
             writer.newLine();
             writer.write(riga);
         } catch (IOException e) {
             e.printStackTrace();
+        }
+        return pathQRCode;
+    }
+
+    private boolean utenteHaPrenotazioniSovrapposte(int idUtente, LocalDate data, String fascia) {
+        try (BufferedReader reader = new BufferedReader(new FileReader("Prenotazioni.txt"))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank() || line.startsWith("//")) continue;
+                String[] campi = line.split(",");
+
+                int idUtenteEsistente = Integer.parseInt(campi[4]);
+                LocalDate dataEsistente = LocalDate.parse(campi[2]);
+                String fasciaEsistente = campi[3];
+
+                // Stesso utente e stessa data?
+                if (idUtenteEsistente == idUtente && dataEsistente.equals(data)) {
+                    if (fasceSiSovrappongono(fasciaEsistente, fascia)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    private boolean fasceSiSovrappongono(String f1, String f2) {
+        try {
+            String[] p1 = f1.split("-");
+            String[] p2 = f2.split("-");
+            LocalTime start1 = LocalTime.parse(p1[0]);
+            LocalTime end1 = LocalTime.parse(p1[1]);
+            LocalTime start2 = LocalTime.parse(p2[0]);
+            LocalTime end2 = LocalTime.parse(p2[1]);
+
+            return start1.isBefore(end2) && start2.isBefore(end1);
+
+        } catch (Exception e) {
+            return false; // se formato non valido, ignora
+        }
+    }
+
+    public static Prenotazione trovaPrenotazione(String qrCode) {
+        Prenotazione pren = ottieniDettagliPrenotazione(qrCode);
+        if (pren == null) {
+            throw new IllegalStateException("Nessuna prenotazione trovata per questo QR Code. " +
+                    "Se non hai ancora prenotato una postazione, effettua prima una prenotazione e riprova il check-in.");
+        }
+        if (CheckIn.checkInGiaEffettuato(pren.getId())) {
+            throw new IllegalStateException("Check-in già effettuato per questa prenotazione.");
+        }
+        StatoPrenotazione stato = validaPrenotazione(pren);
+
+        if (stato == StatoPrenotazione.TROPPO_PRESTO) {
+            throw new IllegalStateException("Check-in non consentito: sei in anticipo rispetto all’orario di inizio.");
+        } else if (stato == StatoPrenotazione.SCADUTA) {
+            throw new IllegalStateException("Prenotazione scaduta: sono passati più di 15 minuti dall’orario di inizio.");
+        } else if (stato == StatoPrenotazione.ERRORE) {
+            throw new IllegalStateException("Errore nella validazione della prenotazione.");
+        }
+        return pren;
+    }
+
+    private static Prenotazione ottieniDettagliPrenotazione(String qrCode) {
+        try (BufferedReader reader = new BufferedReader(new FileReader("Prenotazioni.txt"))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] campi = line.split(",");
+
+                if (campi.length == 6 && campi[5].equals(qrCode)) {
+                    int idPren = Integer.parseInt(campi[0]);
+                    int idPostazione = Integer.parseInt(campi[1]);
+                    LocalDate data = LocalDate.parse(campi[2]);
+                    String fascia = campi[3];
+                    int idUtente = Integer.parseInt(campi[4]);
+
+                    Prenotazione p = new Prenotazione(
+                            idPren, data, fascia,
+                            new Utente(idUtente),
+                            new Postazione(idPostazione)
+                    );
+
+                    return p;
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public enum StatoPrenotazione {
+        VALIDA,
+        TROPPO_PRESTO,
+        SCADUTA,
+        ERRORE
+    }
+
+    // Verifica validità: entro 15 minuti dall’orario di inizio previsto
+    public static StatoPrenotazione validaPrenotazione(Prenotazione p) {
+        try {
+            String[] orari = p.getFasciaOraria().split("-");
+            LocalTime inizio = LocalTime.parse(orari[0].trim());
+
+            LocalDateTime oraPren = LocalDateTime.of(p.getData(), inizio);
+            LocalDateTime oraAttuale = LocalDateTime.now();
+
+            Duration diff = Duration.between(oraPren, oraAttuale);
+
+            if (diff.isNegative()) {
+                return StatoPrenotazione.TROPPO_PRESTO;
+            } else if (diff.toMinutes() > 15) {
+                return StatoPrenotazione.SCADUTA;
+            } else {
+                return StatoPrenotazione.VALIDA;
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return StatoPrenotazione.ERRORE;
         }
     }
 

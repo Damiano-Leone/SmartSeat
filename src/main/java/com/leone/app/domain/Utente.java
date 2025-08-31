@@ -7,6 +7,14 @@ public class Utente {
     private String email;
     private String ruolo;
 
+    public Utente(int idUtente) {
+        this.idUtente = idUtente;
+        this.nome = null;
+        this.cognome = null;
+        this.email = null;
+        this.ruolo = null;
+    }
+
     public Utente(int idUtente, String nome, String cognome, String email, String ruolo) {
         this.idUtente = idUtente;
         this.nome = nome;

@@ -1,5 +1,15 @@
 package com.leone.app.domain;
 
+import com.google.zxing.BinaryBitmap;
+import com.google.zxing.LuminanceSource;
+import com.google.zxing.MultiFormatReader;
+import com.google.zxing.Result;
+import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
+import com.google.zxing.common.HybridBinarizer;
+
+import javax.imageio.ImageIO;
+import javax.swing.*;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -13,17 +23,13 @@ public class SmartSeat {
     private Map<Integer, Sede> elencoSedi;
     private Map<Integer, Utente> elencoUtenti;
     private Map<Integer, Dotazione> elencoDotazioni;
-    private List<Prenotazione> elencoPrenotazioni;
 
-    private Sede sedeCorrente;
-    private Postazione postazioneSelezionata;
     private Prenotazione prenotazioneInCorso;
 
     public SmartSeat(){
         this.elencoSedi = new HashMap<>();
         this.elencoUtenti = new HashMap<>();
         this.elencoDotazioni = new HashMap<>();
-        this.elencoPrenotazioni = new LinkedList<>();
 
         Prenotazione.inizializzaNextIdDaFile();
 
@@ -65,7 +71,6 @@ public class SmartSeat {
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) continue;
 
-                // Regex: split solo sulle virgole fuori dalle virgolette
                 String[] tokens = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
 
                 if (tokens.length < 3) {
@@ -216,13 +221,19 @@ public class SmartSeat {
             String inputData = scanner.nextLine();
             try {
                 dataPrenotazione = LocalDate.parse(inputData, formatter);
+
+                // Controllo che la data non sia passata
+                if (dataPrenotazione.isBefore(LocalDate.now())) {
+                    System.out.println("La data inserita è già passata. Inserisci una data futura o odierna.");
+                    continue;
+                }
+
                 break;
             } catch (DateTimeParseException e) {
                 System.out.println("Data non valida. Usa il formato yyyy-MM-dd.");
             }
         }
 
-        // Fascia oraria nel formato HH:mm-HH:mm
         String fasciaOraria = null;
         Pattern fasciaPattern = Pattern.compile("^([01]\\d|2[0-3]):([0-5]\\d)-([01]\\d|2[0-3]):([0-5]\\d)$");
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
@@ -241,12 +252,20 @@ public class SmartSeat {
                 LocalTime inizio = LocalTime.parse(parts[0], timeFormatter);
                 LocalTime fine = LocalTime.parse(parts[1], timeFormatter);
 
-                if (fine.isAfter(inizio)) {
-                    fasciaOraria = inputFascia;
-                    break;
-                } else {
+                if (!fine.isAfter(inizio)) {
                     System.out.println("L'ora di fine deve essere successiva all'ora di inizio.");
+                    continue;
                 }
+
+                // Controllo che l'orario non sia già passato se la data è oggi
+                if (dataPrenotazione.isEqual(LocalDate.now()) && inizio.isBefore(LocalTime.now())) {
+                    System.out.println("L'orario di inizio è già passato. Inserisci un orario valido.");
+                    continue;
+                }
+
+                fasciaOraria = inputFascia;
+                break;
+
             } catch (DateTimeParseException e) {
                 System.out.println("Orario non valido. Usa il formato HH:mm.");
             }
@@ -268,7 +287,7 @@ public class SmartSeat {
         // 1. Filtro vicino alla finestra
         boolean vicinoFinestra = false;
         while (true) {
-            System.out.print("\nDesideri una postazione vicino alla finestra? (s/n): ");
+            System.out.print("\nVuoi applicare il filtro 'vicino alla finestra'? (s = mostra solo postazioni vicino alla finestra, n = mostra tutte le postazioni): ");
             String input = scanner.nextLine().trim().toLowerCase();
             if (input.equals("s")) {
                 vicinoFinestra = true;
@@ -332,7 +351,7 @@ public class SmartSeat {
         selezionaFiltri(vicinoFinestra, idDotazione, idArea);
 
         System.out.println("\nFiltri selezionati:");
-        System.out.println("- Vicino alla finestra: " + (vicinoFinestra ? "Sì" : "No"));
+        System.out.println("- Vicino alla finestra: " + (vicinoFinestra ? "Sì" : "Nessuna preferenza"));
         System.out.println("- Dotazione: " + (idDotazione == -1 ? "Nessuna preferenza" : elencoDotazioni.get(idDotazione).getNome()));
         System.out.println("- Area: " + (idArea == -1 ? "Nessuna preferenza" : elencoAree.get(idArea).getNome()));
     }
@@ -347,11 +366,11 @@ public class SmartSeat {
         List<Postazione> postazioniDisponibili = new ArrayList<>();
         Sede sede = prenotazioneInCorso.getSede();
 
-        for (Area area : sede.getElencoAree().values()) {
-            for (Postazione p : area.getElencoPostazioni().values()) {
-                if (prenotazioneInCorso.verificaParametri(p)) {
-                    postazioniDisponibili.add(p);
-                }
+        List<Postazione> elencoPostazioni = sede.getPostazioni();
+
+        for (Postazione p : elencoPostazioni) {
+            if (prenotazioneInCorso.verificaParametri(p)) {
+                postazioniDisponibili.add(p);
             }
         }
 
@@ -363,12 +382,16 @@ public class SmartSeat {
         return postazioniDisponibili;
     }
 
-    public void selezionaPostazioneDaConsole() {
+    public boolean selezionaPostazioneDaConsole() {
         List<Postazione> disponibili = mostraPostazioniDisponibili();
 
         if (disponibili.isEmpty()) {
-            System.out.println("Nessuna postazione disponibile per i criteri selezionati.");
-            return;
+            System.out.println("⚠️ Nessuna postazione disponibile per i criteri selezionati.");
+
+            // Dopo aver modificato parametri e filtri, ritorna alla scelta della postazione
+            selezionaParametriDaConsole();
+            selezionaFiltriDaConsole();
+            return selezionaPostazioneDaConsole();
         }
 
         Scanner scanner = new Scanner(System.in);
@@ -394,12 +417,20 @@ public class SmartSeat {
             }
 
             if (selezionata != null) {
-                try {
-                    selezionaPostazione(selezionata); // eventuale errore qui
-                    break;
-                } catch (Exception e) {
-                    System.out.println("⚠️ Errore durante la selezione della postazione: " + e.getMessage());
-                    e.printStackTrace();
+                boolean ok = selezionaPostazione(selezionata);
+                if (ok) {
+                    return true; // selezione valida
+                } else {
+                    if (gestisciRegoleNonRispettate()) {
+                        // L'utente vuole ripetere la prenotazione
+                        selezionaParametriDaConsole();
+                        selezionaFiltriDaConsole();
+                        return selezionaPostazioneDaConsole();
+                    } else {
+                        // L'utente vuole tornare al menu
+                        System.out.println("🔙 Ritorno al menu principale...");
+                        return false;
+                    }
                 }
             } else {
                 System.out.println("❌ ID non valido. Riprova.");
@@ -408,40 +439,65 @@ public class SmartSeat {
 
     }
 
-    public void selezionaPostazione(Postazione p) {
-        this.postazioneSelezionata = p;
-        prenotazioneInCorso.setPostazione(p);
+    public boolean selezionaPostazione(Postazione p) {
+        try {
+            prenotazioneInCorso.setPostazione(p);
 
-        // Recupera i dati per il controllo delle regole
-        int idSede = p.getArea().getSede().getIdSede();
-        int idUtente = prenotazioneInCorso.getUtente().getIdUtente();
-        LocalDate data = prenotazioneInCorso.getData();
+            // Recupera i dati per il controllo delle regole
+            int idSede = p.getArea().getSede().getIdSede();
+            int idUtente = prenotazioneInCorso.getUtente().getIdUtente();
+            LocalDate data = prenotazioneInCorso.getData();
 
-        // Ottiene tutte le regole applicabili
-        List<Regola> regoleApplicabili = Regola.mostraRegole(idSede, idUtente, data);
+            // Ottiene tutte le regole applicabili
+            List<Regola> regoleApplicabili = Regola.mostraRegole(idSede, idUtente, data);
 
-        // Applica le regole alla prenotazione
-        for (Regola r : regoleApplicabili) {
-            prenotazioneInCorso.applicaRegola(r);
-        }
-
-        System.out.println("\n✅ Postazione selezionata correttamente!");
-        if (!regoleApplicabili.isEmpty()) {
-            System.out.println("\n⚠️ Sono state applicate le seguenti regole:");
+            // Applica le regole alla prenotazione
             for (Regola r : regoleApplicabili) {
-                System.out.println("- " + r.getDescrizione());
+                prenotazioneInCorso.applicaRegola(r);
+            }
+
+            System.out.println("\n✅ Postazione selezionata correttamente!");
+            if (!regoleApplicabili.isEmpty()) {
+                System.out.println("\n⚠️ Sono state applicate le seguenti regole:");
+                for (Regola r : regoleApplicabili) {
+                    System.out.println("- " + r.getDescrizione());
+                }
+            }
+
+            System.out.println("\n📋 Riepilogo prenotazione:");
+            System.out.println(prenotazioneInCorso.riepilogoPrenotazione());
+            return true;
+        } catch (IllegalStateException e) {
+            String msg = e.getMessage();
+            System.out.println(msg);
+            return false;
+        }
+    }
+
+    public void confermaPrenotazioneDaConsole() {
+        Scanner scanner = new Scanner(System.in);
+        String input;
+        while (true) {
+            System.out.print("\nVuoi confermare la prenotazione? (s/n): ");
+            input = scanner.nextLine().trim().toLowerCase();
+
+            if (input.equals("s") || input.equals("n")) {
+                break; // input valido
+            } else {
+                System.out.println("⚠️ Inserisci un valore valido: 's' per sì oppure 'n' per no.");
             }
         }
 
-        System.out.println("\n📋 Riepilogo prenotazione:");
-        System.out.println(prenotazioneInCorso);
+        if (input.equals("n")) {
+            System.out.println("❌ Prenotazione annullata.");
+            return;
+        }
+        confermaPrenotazione();
     }
 
     public void confermaPrenotazione() {
         Prenotazione p = this.prenotazioneInCorso;
 
-        int idUtente = p.getUtente().getIdUtente();
-        int idSede = p.getSede().getIdSede();
         LocalDate data = p.getData();
         String fascia = p.getFasciaOraria();
         int idPostazione = p.getPostazione().getIdPostazione();
@@ -452,17 +508,110 @@ public class SmartSeat {
 
             // 2. Verifica se la postazione è ancora disponibile
             if (!p.verificaDisponibilità(idPostazione, data, fascia)) {
-                throw new IllegalStateException("⛔ La postazione selezionata non è più disponibile.");
+                System.out.println("⛔ La postazione selezionata non è più disponibile. Selezionane un'altra.");
+
+                // Torna alla selezione della postazione
+                selezionaPostazioneDaConsole();
+                confermaPrenotazioneDaConsole();
+                return;
             }
 
             // 3. Registra prenotazione
-            Prenotazione.registraPrenotazione(p);
+            String qrPath = p.registraPrenotazione();
 
             System.out.println("\n✅ Prenotazione confermata con successo!");
             System.out.println("📄 Ricevuta: " + p);
+            System.out.println("🔗 QR Code generato: " + qrPath);
 
         } catch (IllegalStateException e) {
-            throw e;
+            String msg = e.getMessage();
+
+            // Altrimenti (altre regole non rispettate)
+            System.out.println(msg);
+
+            if (gestisciRegoleNonRispettate()) {
+                // L'utente vuole ripetere la prenotazione
+                selezionaParametriDaConsole();
+                selezionaFiltriDaConsole();
+                selezionaPostazioneDaConsole();
+                confermaPrenotazioneDaConsole();
+            } else {
+                // L'utente vuole tornare al menu
+                System.out.println("🔙 Ritorno al menu principale...");
+            }
+        }
+    }
+
+    private boolean gestisciRegoleNonRispettate() {
+        Scanner scanner = new Scanner(System.in);
+        while (true) {
+            System.out.println("\n⚠️ Alcune regole non sono rispettate.");
+            System.out.println("Vuoi ripetere la prenotazione o terminare?");
+            System.out.println("1. Ripeti prenotazione");
+            System.out.println("0. Torna al menu principale");
+            System.out.print("Scelta: ");
+
+            String scelta = scanner.nextLine().trim();
+
+            if (scelta.equals("1")) {
+                return true;  // ripeti scelta dei parametri
+            } else if (scelta.equals("0")) {
+                return false; // torna al menu
+            } else {
+                System.out.println("❌ Scelta non valida. Inserisci 1 o 0.");
+            }
+        }
+    }
+
+    public void effettuaCheckIn() {
+        try {
+            // 1. L'utente seleziona un file immagine (QR code)
+            String basePath = System.getProperty("user.dir");
+            File qrFolder = new File(basePath, "qrcode");
+            JFileChooser fileChooser = new JFileChooser(qrFolder);
+            JFrame frame = new JFrame();
+            frame.setAlwaysOnTop(true);
+            frame.setVisible(false);
+            fileChooser.setDialogTitle("Seleziona un QR Code da aprire");
+            int result = fileChooser.showOpenDialog(frame);
+            if (result != JFileChooser.APPROVE_OPTION) {
+                System.out.println("❌ Nessun file selezionato.");
+                return;
+            }
+
+            File qrFile = fileChooser.getSelectedFile();
+
+            // 2. Decodifica QR code
+            BufferedImage bufferedImage = ImageIO.read(qrFile);
+            LuminanceSource source = new BufferedImageLuminanceSource(bufferedImage);
+            BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
+            Result resultQR = new MultiFormatReader().decode(bitmap);
+
+            String qrCode = resultQR.getText(); // testo contenuto nel QR
+            System.out.println("📸 QR Code letto: " + qrCode);
+
+            // 3. Recupera prenotazione
+            Prenotazione pren = Prenotazione.trovaPrenotazione(qrCode);
+
+            // 4. Crea CheckIn associando i dati della prenotazione
+            CheckIn checkInCorrente = new CheckIn(
+                    pren.getUtente().getIdUtente(),
+                    pren.getId(),
+                    pren.getPostazione().getIdPostazione(),
+                    "QR"
+            );
+
+            // 5. Registra il CheckIn
+            if (checkInCorrente.registraCheckIn()) {
+                System.out.println("✅ Check-in effettuato con successo per la prenotazione: " + pren.getId());
+            } else {
+                System.out.println("⚠️ Errore durante il salvataggio del check-in.");
+            }
+
+        } catch (IllegalStateException e) {
+            System.out.println("⛔ " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("⚠️ Errore durante il check-in: " + e.getMessage());
         }
     }
 

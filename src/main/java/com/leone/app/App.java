@@ -12,12 +12,11 @@ public class App {
         SmartSeat smartSeat = SmartSeat.getInstance();
         Scanner scanner = new Scanner(System.in);
 
-        int idUtente = smartSeat.selezionaUtenteDaConsole();
-
         boolean continua = true;
         while (continua) {
             System.out.println("\n--- MENU ---");
             System.out.println("1. Prenota postazione");
+            System.out.println("2. Check-in postazione");
             System.out.println("0. Esci");
             System.out.print("Scegli un’opzione: ");
 
@@ -26,11 +25,19 @@ public class App {
             switch (scelta) {
                 case "1" -> {
                     try {
+                        int idUtente = smartSeat.selezionaUtenteDaConsole();
                         smartSeat.avviaPrenotazione(idUtente);
                         smartSeat.selezionaParametriDaConsole();
                         smartSeat.selezionaFiltriDaConsole();
-                        smartSeat.selezionaPostazioneDaConsole();
-                        smartSeat.confermaPrenotazione();
+                        if (smartSeat.selezionaPostazioneDaConsole())
+                            smartSeat.confermaPrenotazioneDaConsole();
+                    } catch (IllegalStateException e) {
+                        System.out.println(e.getMessage());
+                    }
+                }
+                case "2" -> {
+                    try {
+                        smartSeat.effettuaCheckIn();
                     } catch (IllegalStateException e) {
                         System.out.println(e.getMessage());
                     }
