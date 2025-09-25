@@ -1,3 +1,4 @@
-1,Marco,Rossi,marco.rossi@gmail.com,utente
-2,Giulia,Bianchi,giulia.bianchi@gmail.com,utente
-3,Luca,Neri,luca.neri@gmail.com,admin
+// Sostituire con l'indirizzo email su cui si desidera ricevere le notifiche durante i test
+1,Marco,Rossi,test@example.com,utente
+2,Giulia,Bianchi,test@example.com,utente
+3,Luca,Neri,test@example.com,admin

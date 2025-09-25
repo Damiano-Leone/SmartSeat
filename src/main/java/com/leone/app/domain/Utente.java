@@ -1,11 +1,21 @@
 package com.leone.app.domain;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+
 public class Utente {
     private final int idUtente;
     private String nome;
     private String cognome;
     private String email;
     private String ruolo;
+
+    private static String FILE_NAME = "Utenti.txt";
+
+    public static void setFileName(String fileName) {
+        FILE_NAME = fileName;
+    }
 
     public Utente(int idUtente) {
         this.idUtente = idUtente;
@@ -69,5 +79,26 @@ public class Utente {
                 ", email='" + email + '\'' +
                 ", ruolo='" + ruolo + '\'' +
                 '}';
+    }
+
+    public static Utente getById(int id) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_NAME))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isBlank() || line.startsWith("//")) continue;
+                String[] campi = line.split(",");
+                int idUtente = Integer.parseInt(campi[0]);
+                if (idUtente == id) {
+                    String nome = campi[1];
+                    String cognome = campi[2];
+                    String email = campi[3];
+                    String ruolo = campi[4];
+                    return new Utente(idUtente, nome, cognome, email, ruolo);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 }

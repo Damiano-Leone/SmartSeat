@@ -5,6 +5,12 @@ public class Dotazione {
     private String nome;
     private String descrizione;
 
+    private static String FILE_NAME = "Dotazioni.txt";
+
+    public static void setFileName(String fileName) {
+        FILE_NAME = fileName;
+    }
+
     public Dotazione(int idDotazione, String nome, String descrizione) {
         this.idDotazione = idDotazione;
         this.nome = nome;

@@ -26,6 +26,7 @@ public class SmartSeat {
 
     private Prenotazione prenotazioneInCorso;
 
+
     public SmartSeat(){
         this.elencoSedi = new HashMap<>();
         this.elencoUtenti = new HashMap<>();
@@ -44,6 +45,26 @@ public class SmartSeat {
             smartSeat = new SmartSeat();
 
         return smartSeat;
+    }
+
+    public Map<Integer, Utente> getElencoUtenti() {
+        return elencoUtenti;
+    }
+
+    public Map<Integer, Dotazione> getElencoDotazioni() {
+        return elencoDotazioni;
+    }
+
+    public Map<Integer, Sede> getElencoSedi() {
+        return elencoSedi;
+    }
+
+    public Prenotazione getPrenotazioneInCorso() {
+        return prenotazioneInCorso;
+    }
+
+    public void setPrenotazioneInCorso(Prenotazione prenotazione) {
+        this.prenotazioneInCorso = prenotazione;
     }
 
     public void loadUtenti() {
@@ -159,7 +180,7 @@ public class SmartSeat {
         }
     }
 
-    public int selezionaUtenteDaConsole() {
+    public Utente selezionaUtenteDaConsole(String ruoloRichiesto) {
         Scanner scanner = new Scanner(System.in);
 
         System.out.println("Seleziona un utente con cui effettuare l’accesso:");
@@ -167,21 +188,34 @@ public class SmartSeat {
             System.out.printf("%d - %s %s (%s)%n", u.getIdUtente(), u.getNome(), u.getCognome(), u.getRuolo());
         }
 
-        int idUtenteSelezionato = -1;
-        while (true) {
+        Utente utenteSelezionato = null;
+        while (utenteSelezionato == null) {
             System.out.print("Inserisci l’ID utente: ");
             String input = scanner.nextLine();
+            int idUtente;
             try {
-                idUtenteSelezionato = Integer.parseInt(input);
-                if (elencoUtenti.containsKey(idUtenteSelezionato)) break;
-                else System.out.println("ID utente non valido, riprova.");
+                idUtente = Integer.parseInt(input);
             } catch (NumberFormatException e) {
-                System.out.println("Input non valido, inserisci un numero.");
+                System.out.println("❌ Input non valido, inserisci un numero.");
+                continue;
             }
+
+            Utente u = elencoUtenti.get(idUtente);
+            if (u == null) {
+                System.out.println("❌ ID utente non valido, riprova.");
+                continue;
+            }
+
+            if (!u.getRuolo().equalsIgnoreCase(ruoloRichiesto)) {
+                System.out.println("❌ Accesso negato. L’utente selezionato non ha il ruolo richiesto: " + ruoloRichiesto);
+                continue;
+            }
+
+            utenteSelezionato = u;
         }
 
-        System.out.println("Utente " + elencoUtenti.get(idUtenteSelezionato).getNome() + " selezionato.");
-        return idUtenteSelezionato;
+        System.out.println("✅ Utente " + utenteSelezionato.getNome() + " " + utenteSelezionato.getCognome() + " selezionato con successo.");
+        return utenteSelezionato;
     }
 
     public void avviaPrenotazione(int idUtente) {
@@ -423,6 +457,7 @@ public class SmartSeat {
                 } else {
                     if (gestisciRegoleNonRispettate()) {
                         // L'utente vuole ripetere la prenotazione
+                        prenotazioneInCorso.resetRegole();
                         selezionaParametriDaConsole();
                         selezionaFiltriDaConsole();
                         return selezionaPostazioneDaConsole();
@@ -454,6 +489,7 @@ public class SmartSeat {
             // Applica le regole alla prenotazione
             for (Regola r : regoleApplicabili) {
                 prenotazioneInCorso.applicaRegola(r);
+                prenotazioneInCorso.aggiungiRegola(r);
             }
 
             System.out.println("\n✅ Postazione selezionata correttamente!");
@@ -523,6 +559,8 @@ public class SmartSeat {
             System.out.println("📄 Ricevuta: " + p);
             System.out.println("🔗 QR Code generato: " + qrPath);
 
+            Notifica.generaNotificaPrenotazione(p, qrPath, false);
+
         } catch (IllegalStateException e) {
             String msg = e.getMessage();
 
@@ -531,6 +569,7 @@ public class SmartSeat {
 
             if (gestisciRegoleNonRispettate()) {
                 // L'utente vuole ripetere la prenotazione
+                prenotazioneInCorso.resetRegole();
                 selezionaParametriDaConsole();
                 selezionaFiltriDaConsole();
                 selezionaPostazioneDaConsole();
@@ -615,4 +654,507 @@ public class SmartSeat {
         }
     }
 
+    // usato solamente per i test
+    public boolean effettuaCheckInDaFile(File qrFile) {
+        try {
+            BufferedImage bufferedImage = ImageIO.read(qrFile);
+            LuminanceSource source = new BufferedImageLuminanceSource(bufferedImage);
+            BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
+            Result resultQR = new MultiFormatReader().decode(bitmap);
+            String qrCode = resultQR.getText();
+
+            Prenotazione pren = Prenotazione.trovaPrenotazione(qrCode);
+            CheckIn checkIn = new CheckIn(
+                    pren.getUtente().getIdUtente(),
+                    pren.getId(),
+                    pren.getPostazione().getIdPostazione(),
+                    "QR"
+            );
+            return checkIn.registraCheckIn();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+
+    public List<Regola> avviaConfigurazioneRegole() {
+        System.out.println("\n📋 Elenco regole:");
+        List<Regola> regole = Regola.mostraTutteLeRegole();
+        if (regole.isEmpty()) {
+            System.out.println("Nessuna regola configurata.");
+        } else {
+            System.out.printf(
+                    "%-3s | %-23s | %-22s | %-7s | %-3s | %-30s | %-10s | %-10s | %-40s%n",
+                    "ID", "Nome", "Tipo", "Scope", "Rif", "Valore", "Inizio", "Fine", "Descrizione"
+            );
+            System.out.println("─".repeat(170));
+
+            for (Regola r : regole) {
+                System.out.printf(
+                        "%-3d | %-23s | %-22s | %-7s | %-3s | %-30s | %-10s | %-10s | %-40s%n",
+                        r.getId(),
+                        r.getNome(),
+                        r.getTipo(),
+                        r.getScope(),
+                        (r.getIdRiferimento() == -1 ? "*" : r.getIdRiferimento()),
+                        (r.getValore() == null || r.getValore().isBlank() ? "-" : r.getValore()),
+                        r.getDataInizio(),
+                        r.getDataFine(),
+                        r.getDescrizione()
+                );
+            }
+        }
+        return regole;
+    }
+
+    public void gestisciRegoleDaConsole() {
+        Scanner sc = new Scanner(System.in);
+        List<Regola> tutte = avviaConfigurazioneRegole();
+        int scelta = 0;
+        while (scelta < 1 || scelta > 3) {
+            System.out.print("\nVuoi (1) aggiungere, (2) modificare o (3) eliminare una regola?: ");
+            try {
+                scelta = Integer.parseInt(sc.nextLine());
+                if (scelta < 1 || scelta > 3) {
+                    System.out.println("❌ Scelta non valida, inserisci 1, 2 o 3.");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("❌ Inserisci un numero valido (1, 2 o 3).");
+            }
+        }
+
+        Regola regolaCorrente;
+        if (scelta == 3) {
+            if (tutte == null || tutte.isEmpty()) {
+                System.out.println("❌ Nessuna regola disponibile.");
+                return;
+            }
+
+            System.out.print("ID regola da eliminare: ");
+            int idDel;
+            try {
+                idDel = Integer.parseInt(sc.nextLine());
+            } catch (NumberFormatException e) {
+                System.out.println("❌ Inserisci un numero intero valido.");
+                return;
+            }
+
+            regolaCorrente = tutte.stream()
+                    .filter(r -> r.getId() == idDel)
+                    .findFirst()
+                    .orElse(null);
+
+            if (regolaCorrente == null) {
+                System.out.println("❌ ID regola non trovato.");
+                return;
+            }
+
+            annullaRegola(regolaCorrente);
+            return;
+        }
+
+        if (scelta == 2) {
+            if (tutte == null || tutte.isEmpty()) {
+                System.out.println("❌ Nessuna regola disponibile, impossibile modificare.");
+                return;
+            }
+            System.out.print("Inserisci l'ID della regola da modificare: ");
+            int id = Integer.parseInt(sc.nextLine());
+
+            Regola esistente = null;
+            for (Regola r : tutte) {
+                if (r.getId() == id) {
+                    esistente = r;
+                    break;
+                }
+            }
+
+            if (esistente == null) {
+                System.out.println("❌ Nessuna regola trovata con ID " + id);
+                return;
+            }
+            // Stampa intestazione + riga della regola selezionata
+            System.out.printf(
+                    "\n%-3s | %-23s | %-22s | %-7s | %-3s | %-30s | %-10s | %-10s | %-40s%n",
+                    "ID", "Nome", "Tipo", "Scope", "Rif", "Valore", "Inizio", "Fine", "Descrizione"
+            );
+
+            System.out.printf(
+                    "%-3d | %-23s | %-22s | %-7s | %-3s | %-30s | %-10s | %-10s | %-40s%n",
+                    esistente.getId(),
+                    esistente.getNome(),
+                    esistente.getTipo(),
+                    esistente.getScope(),
+                    (esistente.getIdRiferimento() == -1 ? "*" : esistente.getIdRiferimento()),
+                    (esistente.getValore() == null || esistente.getValore().isBlank() ? "-" : esistente.getValore()),
+                    esistente.getDataInizio(),
+                    esistente.getDataFine(),
+                    esistente.getDescrizione()
+            );
+            System.out.println("\nPremi INVIO per mantenere il valore attuale, oppure scrivi un nuovo valore.");
+            System.out.print("Nome regola [" + esistente.getNome() + "]: ");
+            String nuovoNome = sc.nextLine().trim();
+            if (!nuovoNome.isEmpty()) {
+                esistente.setNome(nuovoNome);
+            }
+
+            // Valore (solo se tipo = LIMITE_ORE_GIORNALIERO o BLOCCO_GIORNI)
+            switch (esistente.getTipo()) {
+                case LIMITE_ORE_GIORNALIERO:
+                    while (true) {
+                        System.out.print("Valore (ore 1-23) [" + esistente.getValore() + "]: ");
+                        String nuovoValoreOre = sc.nextLine().trim();
+
+                        // INVIO → mantieni valore attuale
+                        if (nuovoValoreOre.isEmpty()) {
+                            break;
+                        }
+
+                        try {
+                            int ore = Integer.parseInt(nuovoValoreOre);
+                            if (ore >= 1 && ore <= 23) {
+                                esistente.setValore(nuovoValoreOre);
+                                break;
+                            } else {
+                                System.out.println("❌ Numero non valido. Inserisci un valore tra 1 e 23 oppure premi INVIO per mantenere.");
+                            }
+                        } catch (NumberFormatException e) {
+                            System.out.println("\n❌ Inserisci un numero intero valido oppure premi INVIO per mantenere.");
+                        }
+                    }
+                    break;
+
+                case BLOCCO_GIORNI:
+                    while (true) {
+                        System.out.print("Valore (giorni separati da ',') [" + esistente.getValore() + "]: ");
+                        String nuovoValoreGiorni = sc.nextLine().trim().toUpperCase();
+
+                        // INVIO → mantieni valore attuale
+                        if (nuovoValoreGiorni.isEmpty()) {
+                            break;
+                        }
+
+                        Set<String> giorniValidi = Set.of(
+                                "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY",
+                                "FRIDAY", "SATURDAY", "SUNDAY"
+                        );
+                        String[] giorni = nuovoValoreGiorni.split(",");
+                        boolean validi = true;
+                        for (String g : giorni) {
+                            if (!giorniValidi.contains(g.trim())) {
+                                validi = false;
+                                break;
+                            }
+                        }
+                        if (validi) {
+                            esistente.setValore(String.join(",", giorni));
+                            break;
+                        } else {
+                            System.out.println("❌ Giorni non validi. Usa nomi in inglese separati da ',' oppure premi INVIO per mantenere.");
+                        }
+                    }
+                    break;
+
+                default:
+                    // per altri tipi, il valore non si modifica
+                    break;
+            }
+
+            // Date
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+            // Data inizio
+            System.out.print("Data inizio (yyyy-MM-dd) [" + esistente.getDataInizio() + "]: ");
+            String nuovaDataInizio = sc.nextLine().trim();
+            if (!nuovaDataInizio.isEmpty()) {
+                try {
+                    LocalDate nuova = LocalDate.parse(nuovaDataInizio, formatter);
+                    esistente.setDataInizio(nuova);
+                } catch (DateTimeParseException e) {
+                    System.out.println("❌ Formato non valido, mantenuta: " + esistente.getDataInizio());
+                }
+            }
+
+            // Data fine
+            System.out.print("Data fine (yyyy-MM-dd) [" + esistente.getDataFine() + "]: ");
+            String nuovaDataFine = sc.nextLine().trim();
+            if (!nuovaDataFine.isEmpty()) {
+                try {
+                    LocalDate nuova = LocalDate.parse(nuovaDataFine, formatter);
+                    if (!nuova.isBefore(esistente.getDataInizio())) {
+                        esistente.setDataFine(nuova);
+                    } else {
+                        System.out.println("❌ Data fine non può precedere data inizio, mantenuta: " + esistente.getDataFine());
+                    }
+                } catch (DateTimeParseException e) {
+                    System.out.println("❌ Formato non valido, mantenuta: " + esistente.getDataFine());
+                }
+            }
+
+            // Descrizione
+            System.out.print("Descrizione [" + esistente.getDescrizione() + "]: ");
+            String nuovaDescrizione = sc.nextLine().trim();
+            if (!nuovaDescrizione.isEmpty()) {
+                esistente.setDescrizione(nuovaDescrizione);
+            }
+
+            // Usa l'oggetto aggiornato come regolaCorrente
+            regolaCorrente = esistente;
+        }
+        else {
+            System.out.println("Inserisci i dati della nuova regola:");
+            // Nome regola
+            String nome;
+            while (true) {
+                System.out.print("Nome regola: ");
+                nome = sc.nextLine().trim();
+                if (!nome.isEmpty()) {
+                    break; // valido → esco dal ciclo
+                }
+                System.out.println("❌ Il nome della regola non può essere vuoto. Riprova.");
+            }
+
+            Regola.TipoRegola tipo = null;
+            while (tipo == null) {
+                System.out.print("Tipo (LIMITE_ORE_GIORNALIERO, BLOCCO_UTENTE, BLOCCO_GIORNI): ");
+                String inputTipo = sc.nextLine().trim().toUpperCase();
+                try {
+                    tipo = Regola.TipoRegola.valueOf(inputTipo);
+                } catch (IllegalArgumentException e) {
+                    System.out.println("❌ Tipo non valido. Valori ammessi: LIMITE_ORE_GIORNALIERO, BLOCCO_UTENTE, BLOCCO_GIORNI.");
+                }
+            }
+
+            Regola.ScopeRegola scope = null;
+            if (tipo == Regola.TipoRegola.BLOCCO_UTENTE) {
+                scope = Regola.ScopeRegola.UTENTE;
+                System.out.println("Scope impostato automaticamente su UTENTE per il tipo BLOCCO_UTENTE.");
+            } else {
+                while (scope == null) {
+                    System.out.print("Scope (SEDE, UTENTE, GLOBALE): ");
+                    String inputScope = sc.nextLine().trim().toUpperCase();
+                    try {
+                        scope = Regola.ScopeRegola.valueOf(inputScope);
+                    } catch (IllegalArgumentException e) {
+                        System.out.println("❌ Scope non valido. Valori ammessi: SEDE, UTENTE, GLOBALE.");
+                    }
+                }
+            }
+
+            int idRif;
+
+            if (scope == Regola.ScopeRegola.SEDE) {
+                while (true) {
+                    System.out.print("ID riferimento SEDE: ");
+                    String input = sc.nextLine();
+                    try {
+                        idRif = Integer.parseInt(input);
+                        break;
+                    } catch (NumberFormatException e) {
+                        System.out.println("❌ Inserisci un numero valido per l'ID SEDE.");
+                    }
+                }
+            } else if (scope == Regola.ScopeRegola.UTENTE) {
+                while (true) {
+                    System.out.print("ID riferimento UTENTE: ");
+                    String input = sc.nextLine();
+                    try {
+                        idRif = Integer.parseInt(input);
+                        break;
+                    } catch (NumberFormatException e) {
+                        System.out.println("❌ Inserisci un numero valido per l'ID UTENTE.");
+                    }
+                }
+
+            } else {
+                // Per GLOBALE, non chiediamo nulla: assegniamo -1
+                idRif = -1;
+            }
+
+            String valore = "";
+
+            switch (tipo) {
+                case BLOCCO_UTENTE:
+                    valore = ""; // valore vuoto, non serve inserimento
+                    break;
+
+                case LIMITE_ORE_GIORNALIERO:
+                    while (true) {
+                        System.out.print("Valore (numero intero da 1 a 23 ore): ");
+                        String input = sc.nextLine().trim();
+                        try {
+                            int ore = Integer.parseInt(input);
+                            if (ore >= 1 && ore <= 23) {
+                                valore = input;
+                                break;
+                            } else {
+                                System.out.println("❌ Inserisci un numero valido tra 1 e 23.");
+                            }
+                        } catch (NumberFormatException e) {
+                            System.out.println("❌ Inserisci un numero intero valido.");
+                        }
+                    }
+                    break;
+
+                case BLOCCO_GIORNI:
+                    Set<String> giorniValidi = Set.of(
+                            "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"
+                    );
+                    while (true) {
+                        System.out.print("Valore (giorni separati da ',' es. SATURDAY,SUNDAY): ");
+                        String input = sc.nextLine().trim().toUpperCase();
+                        String[] giorni = input.split(",");
+                        boolean validi = true;
+                        for (String g : giorni) {
+                            if (!giorniValidi.contains(g.trim())) {
+                                validi = false;
+                                break;
+                            }
+                        }
+                        if (validi) {
+                            valore = String.join(",", giorni);
+                            break;
+                        } else {
+                            System.out.println("❌ Giorni non validi. Usa nomi dei giorni in inglese separati da ',' (es. MONDAY,TUESDAY).");
+                        }
+                    }
+                    break;
+
+                default:
+                    System.out.print("Valore: ");
+                    valore = sc.nextLine();
+            }
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            LocalDate dataInizio = null;
+            while (dataInizio == null) {
+                System.out.print("Data inizio (yyyy-MM-dd): ");
+                String input = sc.nextLine().trim();
+                try {
+                    dataInizio = LocalDate.parse(input, formatter);
+                } catch (DateTimeParseException e) {
+                    System.out.println("❌ Formato non valido. Inserisci la data nel formato yyyy-MM-dd.");
+                }
+            }
+
+            LocalDate dataFine = null;
+            while (dataFine == null) {
+                System.out.print("Data fine (yyyy-MM-dd): ");
+                String input = sc.nextLine().trim();
+                try {
+                    dataFine = LocalDate.parse(input, formatter);
+                    if (dataFine.isBefore(dataInizio)) {
+                        System.out.println("❌ La data fine non può essere precedente alla data inizio.");
+                        dataFine = null;
+                    }
+                } catch (DateTimeParseException e) {
+                    System.out.println("❌ Formato non valido. Inserisci la data nel formato yyyy-MM-dd.");
+                }
+            }
+
+            // Descrizione
+            String descrizione;
+            while (true) {
+                System.out.print("Descrizione: ");
+                descrizione = sc.nextLine().trim();
+                if (!descrizione.isEmpty()) {
+                    break;
+                }
+                System.out.println("❌ La descrizione non può essere vuota. Riprova.");
+            }
+            regolaCorrente = new Regola(-1, nome, tipo, scope, idRif, valore, dataInizio, dataFine, descrizione);
+        }
+        boolean completato = false;
+        while (!completato) {
+            if (confermaRegola(regolaCorrente)) {
+                completato = true; // regola salvata → esco
+            } else {
+                gestisciRegoleDaConsole();
+                return;
+            }
+        }
+    }
+
+    public boolean confermaRegola(Regola regolaCorrente) {
+        // Valida coerenza della regola
+        if (!regolaCorrente.validaCoerenzaRegola()) {
+            System.out.println("❌ Regola non coerente: modifica i valori o elimina eventuali regole conflittuali.");
+            return false;
+        }
+        if (regolaCorrente.registraRegola()) {
+            System.out.println("✅ Registrazione regola effettuata con successo!");
+        } else {
+            System.out.println("❌ Registrazione regola fallita.");
+            return false;
+        }
+
+        List<Prenotazione> tuttePrenotazioni = Prenotazione.mostraTutteLePrenotazioni();
+        // Iterazione inversa: mantengo le prime prenotazioni ed eventualmente annullo solo le ultime
+        for (int i = tuttePrenotazioni.size() - 1; i >= 0; i--) {
+            Prenotazione p = tuttePrenotazioni.get(i);
+            // Solo prenotazioni con data >= dataInizio della regola
+            if (p.verificaConflittoPrenotazione(regolaCorrente)) {
+                // Conflitto rilevato → annulla prenotazione e notifica utente
+                System.out.println("⚠️ Conflitto rilevato: Prenotazione [ID:" + p.getId() +
+                        "] | Utente:" + p.getUtente().getNome() + " " + p.getUtente().getCognome() +
+                        " | Data:" + p.getData() +
+                        " | Orario:" + p.getFasciaOraria() +
+                        " | Postazione:" + p.getPostazione().getCodice() + " " + p.getPostazione().getPosizione());
+                if (p.annullaPrenotazione()) {
+                    System.out.println("✅ Prenotazione ID [" + p.getId() + "] è stata annullata correttamente.");
+                } else {
+                    System.out.println("❌ Errore durante l'annullamento della prenotazione ID " + p.getId());
+                    return false;
+                }
+                try {
+                    Notifica.generaNotificaAnnullamento(p, regolaCorrente, false);
+                } catch (Exception e) {
+                    System.out.println("❌ Errore nell'invio email di notifica a " + p.getUtente().getEmail());
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public boolean annullaRegola(Regola regolaCorrente) {
+        if (regolaCorrente == null) return false;
+
+        System.out.println("⚠️ Stai per eliminare la regola: \"" + regolaCorrente.getNome() + "\"");
+        System.out.println("\nDettagli:");
+        System.out.printf(
+                "%-3s | %-23s | %-22s | %-7s | %-3s | %-30s | %-10s | %-10s | %-40s%n",
+                "ID", "Nome", "Tipo", "Scope", "Rif", "Valore", "Inizio", "Fine", "Descrizione"
+        );
+        System.out.printf(
+                "%-3d | %-23s | %-22s | %-7s | %-3s | %-30s | %-10s | %-10s | %-40s%n",
+                regolaCorrente.getId(),
+                regolaCorrente.getNome(),
+                regolaCorrente.getTipo(),
+                regolaCorrente.getScope(),
+                (regolaCorrente.getIdRiferimento() == -1 ? "*" : regolaCorrente.getIdRiferimento()),
+                (regolaCorrente.getValore() == null || regolaCorrente.getValore().isBlank() ? "-" : regolaCorrente.getValore()),
+                regolaCorrente.getDataInizio(),
+                regolaCorrente.getDataFine(),
+                regolaCorrente.getDescrizione()
+        );
+
+        Scanner sc = new Scanner(System.in);
+        System.out.print("\nConfermi l’eliminazione della regola? (s/n): ");
+        String conferma = sc.nextLine().trim().toUpperCase();
+        if (!conferma.equals("S")) {
+            System.out.println("❌ Operazione annullata.");
+            return false;
+        }
+
+        if (regolaCorrente.eliminaRegola()) {
+            System.out.println("✅ Regola eliminata con successo!");
+            return true;
+        } else {
+            System.out.println("❌ Errore durante l’eliminazione della regola.");
+            return false;
+        }
+    }
 }

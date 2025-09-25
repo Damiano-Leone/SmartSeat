@@ -3,6 +3,7 @@
 
 # Log file
 *.log
+*.log.lck
 
 # BlueJ files
 *.ctxt
@@ -45,3 +46,16 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Ignora file di configurazione locali
+.env
+
+# Ignora file di test
+AreeTest.txt
+SediTest.txt
+UtentiTest.txt
+DotazioniTest.txt
+PostazioniTest.txt
+PrenotazioniTest.txt
+RegoleTest.txt
+CheckInTest.txt

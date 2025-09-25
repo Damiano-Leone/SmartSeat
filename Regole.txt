@@ -3,3 +3,9 @@
 2;Blocco utente 3;BLOCCO_UTENTE;UTENTE;3;;2025-07-01;2025-07-20;Utente bloccato per uso scorretto
 3;Stop weekend;BLOCCO_GIORNI;GLOBALE;*;SATURDAY,SUNDAY;2025-01-01;2025-12-31;Prenotazioni non consentite nel weekend
 4;Blocco utente 3;BLOCCO_UTENTE;UTENTE;2;;2025-08-25;2025-09-24;Utente bloccato per uso scorretto
+5;Blocco utente 1;BLOCCO_UTENTE;UTENTE;1;;2025-09-22;2025-09-25;Utente bloccato per uso scorretto
+6;Limite ore utente 1;LIMITE_ORE_GIORNALIERO;UTENTE;1;1;2025-09-15;2025-09-15;Massimo 1 ora al giorno per utente 1
+7;Limite ore sede 5;LIMITE_ORE_GIORNALIERO;SEDE;5;1;2025-09-17;2025-09-16;Massimo 1 ora al giorno per gli utenti della sede 5
+8;Limite ore globale;LIMITE_ORE_GIORNALIERO;GLOBALE;*;15;2025-09-01;2025-09-30;Massimo 15 ore al giorno per tutti gli utenti
+9;Stop Venerdì;BLOCCO_GIORNI;GLOBALE;*;FRIDAY;2025-09-01;2025-09-30;Stop Venerdì
+10;stop venerdì;BLOCCO_GIORNI;UTENTE;1;FRIDAY;2025-09-01;2025-09-30;Stop Venerdì
