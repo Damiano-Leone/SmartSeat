@@ -91,11 +91,9 @@ public class Notifica {
                 + "<li><b>Regole applicate:</b><ul>";
 
         for (Regola r : prenotazione.getRegoleApplicate()) {
-            bodyHtml += "<li>"
-                    + "<b>Descrizione:</b> " + r.getDescrizione() + ", "
-                    + "<b>Data inizio:</b> " + r.getDataInizio() + ", "
-                    + "<b>Data fine:</b> " + r.getDataFine()
-                    + "</li>";
+            bodyHtml += "<li><b>Descrizione:</b> " + r.getDescrizione() + "</li>"
+                    + "<li><b>Data inizio:</b> " + r.getDataInizio() + "</li>"
+                    + "<li><b>Data fine:</b> " + r.getDataFine() + "</li>";
         }
 
         bodyHtml += "</ul></li>"

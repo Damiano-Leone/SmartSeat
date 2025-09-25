@@ -71,6 +71,7 @@ public class SmartSeat {
         try (BufferedReader reader = new BufferedReader(new FileReader("Utenti.txt"))) {
             String line;
             while ((line = reader.readLine()) != null) {
+                if (line.isBlank() || line.startsWith("//")) continue;
                 String[] tokens = line.split(",");
                 int id = Integer.parseInt(tokens[0]);
                 String nome = tokens[1];
@@ -865,32 +866,55 @@ public class SmartSeat {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
             // Data inizio
-            System.out.print("Data inizio (yyyy-MM-dd) [" + esistente.getDataInizio() + "]: ");
-            String nuovaDataInizio = sc.nextLine().trim();
-            if (!nuovaDataInizio.isEmpty()) {
+            LocalDate dataInizioValida = null;
+            do {
+                System.out.print("Data inizio (yyyy-MM-dd) [" + esistente.getDataInizio() + "]: ");
+                String nuovaDataInizio = sc.nextLine().trim();
+
+                if (nuovaDataInizio.isEmpty()) {
+                    dataInizioValida = esistente.getDataInizio(); // mantiene la data esistente
+                    break;
+                }
+
                 try {
                     LocalDate nuova = LocalDate.parse(nuovaDataInizio, formatter);
-                    esistente.setDataInizio(nuova);
-                } catch (DateTimeParseException e) {
-                    System.out.println("❌ Formato non valido, mantenuta: " + esistente.getDataInizio());
-                }
-            }
-
-            // Data fine
-            System.out.print("Data fine (yyyy-MM-dd) [" + esistente.getDataFine() + "]: ");
-            String nuovaDataFine = sc.nextLine().trim();
-            if (!nuovaDataFine.isEmpty()) {
-                try {
-                    LocalDate nuova = LocalDate.parse(nuovaDataFine, formatter);
-                    if (!nuova.isBefore(esistente.getDataInizio())) {
-                        esistente.setDataFine(nuova);
+                    if (!nuova.isBefore(LocalDate.now())) { // oggi o successiva
+                        dataInizioValida = nuova;
                     } else {
-                        System.out.println("❌ Data fine non può precedere data inizio, mantenuta: " + esistente.getDataFine());
+                        System.out.println("❌ La data deve essere oggi o successiva. Riprova.");
                     }
                 } catch (DateTimeParseException e) {
-                    System.out.println("❌ Formato non valido, mantenuta: " + esistente.getDataFine());
+                    System.out.println("❌ Formato non valido. Riprova.");
                 }
-            }
+            } while (dataInizioValida == null);
+
+            esistente.setDataInizio(dataInizioValida);
+
+            // Data fine
+            LocalDate dataFineValida = null;
+            do {
+                System.out.print("Data fine (yyyy-MM-dd) [" + esistente.getDataFine() + "]: ");
+                String nuovaDataFine = sc.nextLine().trim();
+
+                if (nuovaDataFine.isEmpty()) {
+                    dataFineValida = esistente.getDataFine(); // mantiene la data esistente
+                    break;
+                }
+
+                try {
+                    LocalDate nuova = LocalDate.parse(nuovaDataFine, formatter);
+                    if (!nuova.isBefore(esistente.getDataInizio())) { // deve essere >= data inizio
+                        dataFineValida = nuova;
+                    } else {
+                        System.out.println("❌ Data fine non può precedere data inizio. Riprova.");
+                    }
+                } catch (DateTimeParseException e) {
+                    System.out.println("❌ Formato non valido. Riprova.");
+                }
+            } while (dataFineValida == null);
+
+            esistente.setDataFine(dataFineValida);
+
 
             // Descrizione
             System.out.print("Descrizione [" + esistente.getDescrizione() + "]: ");
@@ -1032,7 +1056,12 @@ public class SmartSeat {
                 System.out.print("Data inizio (yyyy-MM-dd): ");
                 String input = sc.nextLine().trim();
                 try {
-                    dataInizio = LocalDate.parse(input, formatter);
+                    LocalDate parsed = LocalDate.parse(input, formatter);
+                    if (!parsed.isBefore(LocalDate.now())) { // controlla che sia oggi o dopo
+                        dataInizio = parsed;
+                    } else {
+                        System.out.println("❌ La data inizio deve essere oggi o successiva.");
+                    }
                 } catch (DateTimeParseException e) {
                     System.out.println("❌ Formato non valido. Inserisci la data nel formato yyyy-MM-dd.");
                 }
@@ -1044,7 +1073,7 @@ public class SmartSeat {
                 String input = sc.nextLine().trim();
                 try {
                     dataFine = LocalDate.parse(input, formatter);
-                    if (dataFine.isBefore(dataInizio)) {
+                    if (dataFine.isBefore(dataInizio)) { // data fine >= data inizio
                         System.out.println("❌ La data fine non può essere precedente alla data inizio.");
                         dataFine = null;
                     }
@@ -1094,7 +1123,7 @@ public class SmartSeat {
         for (int i = tuttePrenotazioni.size() - 1; i >= 0; i--) {
             Prenotazione p = tuttePrenotazioni.get(i);
             // Solo prenotazioni con data >= dataInizio della regola
-            if (p.verificaConflittoPrenotazione(regolaCorrente)) {
+            if (p.verificaConflittoPrenotazione(regolaCorrente) && !CheckIn.checkInGiaEffettuato(p.getId())) {
                 // Conflitto rilevato → annulla prenotazione e notifica utente
                 System.out.println("⚠️ Conflitto rilevato: Prenotazione [ID:" + p.getId() +
                         "] | Utente:" + p.getUtente().getNome() + " " + p.getUtente().getCognome() +
